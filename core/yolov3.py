@@ -98,11 +98,9 @@ class yolov3(object):
     def _reorg_layer(self, feature_map, anchors):
 
         num_anchors = len(anchors) # num_anchors=3
-        # grid_size = tf.shape(feature_map)[1:3]
         grid_size = feature_map.shape.as_list()[1:3]
 
         stride = tf.cast(self.img_size // grid_size, tf.float32)
-        anchors = [(a[0] / stride[0], a[1] / stride[1]) for a in anchors]
 
         feature_map = tf.reshape(feature_map, [-1, grid_size[0], grid_size[1], num_anchors, 5 + self._NUM_CLASSES])
 
@@ -125,7 +123,6 @@ class yolov3(object):
         box_centers = box_centers * stride
 
         box_sizes = tf.exp(box_sizes) * anchors
-        box_sizes = box_sizes * stride
 
         boxes = tf.concat([box_centers, box_sizes], axis=-1)
         return x_y_offset, boxes, conf_logits, prob_logits

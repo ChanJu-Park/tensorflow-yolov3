@@ -23,11 +23,11 @@ SHUFFLE_SIZE = 1
 
 sess = tf.Session()
 # classes = utils.read_coco_names('./data/coco.names')
-num_classes = 80
+num_classes = 20
 # file_pattern = "../COCO/tfrecords/coco*.tfrecords"
-# file_pattern = "/home/yang/test/voc/voc_train*.tfrecords"
+file_pattern = "/home/yang/test/voc/voc_train*.tfrecords"
 # file_pattern = "/home/yang/test/kangaroo/tfrecords/kangaroo*.tfrecords"
-file_pattern = "./data/train_data/quick_train_data/tfrecords/quick_train_data*.tfrecords"
+# file_pattern = "./data/train_data/quick_train_data/tfrecords/quick_train_data*.tfrecords"
 anchors = utils.get_anchors('./data/yolo_anchors.txt')
 
 is_training = tf.placeholder(dtype=tf.bool, name="phase_train")
@@ -48,22 +48,6 @@ with tf.variable_scope('yolov3'):
 optimizer = tf.train.MomentumOptimizer(LR, momentum=0.9)
 saver = tf.train.Saver(max_to_keep=2)
 
-rec_tensor  = tf.Variable(0.)
-prec_tensor = tf.Variable(0.)
-mAP_tensor  = tf.Variable(0.)
-
-tf.summary.scalar("yolov3/recall", rec_tensor)
-tf.summary.scalar("yolov3/precision", prec_tensor)
-tf.summary.scalar("yolov3/mAP", mAP_tensor)
-tf.summary.scalar("yolov3/total_loss", loss[0])
-
-tf.summary.scalar("loss/coord_loss", loss[1])
-tf.summary.scalar("loss/sizes_loss", loss[2])
-tf.summary.scalar("loss/confs_loss", loss[3])
-tf.summary.scalar("loss/class_loss", loss[4])
-write_op = tf.summary.merge_all()
-writer_train = tf.summary.FileWriter("./data/log/train")
-
 update_var = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="yolov3/yolo-v3")
 train_op = optimizer.minimize(loss[0], var_list=update_var) # only update yolo layer
 sess.run(tf.global_variables_initializer())
@@ -75,19 +59,11 @@ sess.run(load_op)
 
 
 for epoch in range(EPOCHS):
-    run_items = sess.run([train_op, y_pred, y_true] + loss, feed_dict={is_training:True})
-    rec, prec, mAP = utils.evaluate(run_items[1], run_items[2], num_classes)
-    _, _, _, summary = sess.run([tf.assign(rec_tensor, rec),
-                                 tf.assign(prec_tensor, prec),
-                                 tf.assign(mAP_tensor, mAP), write_op], feed_dict={is_training:True})
-
-    writer_train.add_summary(summary, global_step=epoch)
-    writer_train.flush() # Flushes the event file to disk
+    run_items = sess.run([train_op] + loss, feed_dict={is_training:True})
     if epoch%1000 == 0: saver.save(sess, save_path="./checkpoint/yolov3.ckpt", global_step=epoch)
 
     print("=> EPOCH:%10d\ttotal_loss:%7.4f\tloss_coord:%7.4f\tloss_sizes:%7.4f\tloss_confs:%7.4f\tloss_class:%7.4f"
-          "\trec:%.2f\tprec:%.2f\tmAP:%.2f"
-          %(epoch, run_items[3], run_items[4], run_items[5], run_items[6], run_items[7], rec, prec, mAP))
+          %(epoch, run_items[1], run_items[2], run_items[3], run_items[4], run_items[5]))
 
 
 

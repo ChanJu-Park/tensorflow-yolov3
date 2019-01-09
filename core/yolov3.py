@@ -123,9 +123,11 @@ class yolov3(object):
         box_centers = box_centers * stride
 
         box_sizes = tf.exp(box_sizes) * anchors
+        confs = tf.sigmoid(conf_logits)
+        probs = tf.sigmoid(prob_logits)
 
         boxes = tf.concat([box_centers, box_sizes], axis=-1)
-        return x_y_offset, boxes, conf_logits, prob_logits
+        return x_y_offset, boxes, confs, probs
 
     @staticmethod
     def _upsample(inputs, out_shape):
@@ -228,10 +230,7 @@ class yolov3(object):
         boxes_list, confs_list, probs_list = [], [], []
 
         for result in results:
-            boxes, conf_logits, prob_logits = self._reshape(*result)
-
-            confs = tf.sigmoid(conf_logits)
-            probs = tf.sigmoid(prob_logits)
+            boxes, confs, probs = self._reshape(*result)
 
             boxes_list.append(boxes)
             confs_list.append(confs)
@@ -281,13 +280,13 @@ class yolov3(object):
         stride = tf.cast(self.img_size//grid_size, dtype=tf.float32)
 
         pred_result = self._reorg_layer(feature_map_i, anchors)
-        xy_offset,  pred_box, pred_box_conf_logits, pred_box_class_logits = pred_result
+        xy_offset,  pred_box, pred_box_conf, pred_box_class = pred_result
 
-        true_box_xy = y_true[...,:2] # absolute coordinate
-        true_box_wh = y_true[...,2:4] # absolute size
+        true_box_xy = y_true[..., 0:2] # absolute coordinate
+        true_box_wh = y_true[..., 2:4] # absolute size
 
-        pred_box_xy = pred_box[...,:2]# absolute coordinate
-        pred_box_wh = pred_box[...,2:4]# absolute size
+        pred_box_xy = pred_box[..., 0:2]# absolute coordinate
+        pred_box_wh = pred_box[..., 2:4]# absolute size
 
         # caculate iou between true boxes and pred boxes
         intersect_xy1 = tf.maximum(true_box_xy - true_box_wh / 2.0,
@@ -305,7 +304,6 @@ class yolov3(object):
         iou_scores = tf.expand_dims(iou_scores, axis=-1)
 
         true_box_conf = y_true[...,4:5]
-        pred_box_conf = tf.sigmoid(pred_box_conf_logits)
         ### adjust x and y => relative position to the containing cell
         true_box_xy = true_box_xy / stride  - xy_offset
         pred_box_xy = pred_box_xy / stride  - xy_offset
@@ -323,6 +321,7 @@ class yolov3(object):
         pred_box_wh = tf.log(pred_box_wh_logit)
 
         object_mask = y_true[..., 4:5]
+
         conf_mask = tf.to_float(iou_scores < 0.5) * (1 - object_mask) * NO_OBJECT_SCALE
         # penalize the confidence of the boxes, which are reponsible for corresponding ground truth box
         conf_mask = conf_mask + object_mask * OBJECT_SCALE
@@ -339,7 +338,7 @@ class yolov3(object):
         loss_coord = tf.reduce_sum(tf.square(true_box_xy-pred_box_xy)     * coord_mask) / (nb_coord_box + 1e-6) / 2.
         loss_sizes = tf.reduce_sum(tf.square(true_box_wh-pred_box_wh)     * coord_mask) / (nb_coord_box + 1e-6) / 2.
         loss_confs = tf.reduce_sum(tf.square(true_box_conf-pred_box_conf) * conf_mask)  / (nb_conf_box  + 1e-6) / 2.
-        loss_class = tf.nn.sigmoid_cross_entropy_with_logits(labels=y_true[...,5:], logits=pred_box_class_logits)
+        loss_class = tf.keras.backend.binary_crossentropy(target=y_true[...,5:], output=pred_box_class, from_logits=False)
         loss_class = tf.reduce_sum(loss_class * class_mask) / (nb_class_box + 1e-6)
 
         return  loss_coord, loss_sizes, loss_confs, loss_class

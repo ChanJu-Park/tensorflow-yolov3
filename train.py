@@ -23,11 +23,11 @@ SHUFFLE_SIZE = 1
 
 sess = tf.Session()
 # classes = utils.read_coco_names('./data/coco.names')
-num_classes = 20
+num_classes = 80
 # file_pattern = "../COCO/tfrecords/coco*.tfrecords"
 # file_pattern = "/home/yang/test/voc/voc_train*.tfrecords"
-file_pattern = "/home/yang/test/kangaroo/tfrecords/kangaroo*.tfrecords"
-# file_pattern = "./data/train_data/quick_train_data/tfrecords/quick_train_data*.tfrecords"
+# file_pattern = "/home/yang/test/kangaroo/tfrecords/kangaroo*.tfrecords"
+file_pattern = "./data/train_data/quick_train_data/tfrecords/quick_train_data*.tfrecords"
 anchors = utils.get_anchors('./data/yolo_anchors.txt')
 
 is_training = tf.placeholder(dtype=tf.bool, name="phase_train")

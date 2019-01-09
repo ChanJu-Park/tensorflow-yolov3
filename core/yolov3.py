@@ -314,8 +314,8 @@ class yolov3(object):
         pred_box_xy = pred_box_xy / stride  - xy_offset
 
         ### adjust w and h => relative size to the containing cell
-        true_box_wh_logit = true_box_wh / (anchors * stride)
-        pred_box_wh_logit = pred_box_wh / (anchors * stride)
+        true_box_wh_logit = true_box_wh / anchors
+        pred_box_wh_logit = pred_box_wh / anchors
 
         true_box_wh_logit = tf.where(condition=tf.equal(true_box_wh_logit,0),
                                      x=tf.ones_like(true_box_wh_logit), y=true_box_wh_logit)

@@ -16,18 +16,19 @@ from core import utils, yolov3
 from core.dataset import dataset, Parser
 sess = tf.Session()
 
-IMAGE_H, IMAGE_W = 416, 416
-BATCH_SIZE       = 8
-STEPS            = 2500
-LR               = 0.001 # if Nan, set 0.0005, 0.0001
-DECAY_STEPS      = 100
-DECAY_RATE       = 0.9
-SHUFFLE_SIZE     = 200
-CLASSES          = utils.read_coco_names('./data/raccoon.names')
-ANCHORS          = utils.get_anchors('./data/raccoon_anchors.txt', IMAGE_H, IMAGE_W)
-NUM_CLASSES      = len(CLASSES)
-EVAL_INTERNAL    = 100
-SAVE_INTERNAL    = 500
+IMAGE_H, IMAGE_W   = 416, 416
+BATCH_SIZE         = 2
+FISRT_STAGE_STEPS  = 1000
+SECOND_STAGE_STEPS = 1000
+LR                 = 0.001 # if Nan, set 0.0005, 0.0001
+DECAY_STEPS        = 100
+DECAY_RATE         = 0.9
+SHUFFLE_SIZE       = 200
+CLASSES            = utils.read_coco_names('./data/raccoon.names')
+ANCHORS            = utils.get_anchors('./data/raccoon_anchors.txt', IMAGE_H, IMAGE_W)
+NUM_CLASSES        = len(CLASSES)
+EVAL_INTERNAL      = 100
+SAVE_INTERNAL      = 100
 
 train_tfrecord   = "./raccoon_dataset/raccoon_train.tfrecords"
 test_tfrecord    = "./raccoon_dataset/raccoon_test.tfrecords"
@@ -47,12 +48,14 @@ with tf.variable_scope('yolov3'):
     loss             = model.compute_loss(pred_feature_map, y_true)
     y_pred           = model.predict(pred_feature_map)
 
+net_var = tf.global_variables()
 tf.summary.scalar("loss/coord_loss",   loss[1])
 tf.summary.scalar("loss/sizes_loss",   loss[2])
 tf.summary.scalar("loss/confs_loss",   loss[3])
 tf.summary.scalar("loss/class_loss",   loss[4])
 
-global_step = tf.Variable(0, trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES])
+global_step = tf.Variable(1., trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES])
+global_step_update = tf.assign_add(global_step, 1.)
 write_op = tf.summary.merge_all()
 writer_train = tf.summary.FileWriter("./data/train")
 writer_test  = tf.summary.FileWriter("./data/test")
@@ -60,18 +63,35 @@ writer_test  = tf.summary.FileWriter("./data/test")
 saver_to_restore = tf.train.Saver(var_list=tf.contrib.framework.get_variables_to_restore(include=["yolov3/darknet-53"]))
 update_vars = tf.contrib.framework.get_variables_to_restore(include=["yolov3/yolo-v3"])
 learning_rate = tf.train.exponential_decay(LR, global_step, decay_steps=DECAY_STEPS, decay_rate=DECAY_RATE, staircase=True)
-optimizer = tf.train.AdamOptimizer(learning_rate)
 
-# set dependencies for BN ops
+moving_ave = tf.train.ExponentialMovingAverage(decay=0.995).apply(tf.trainable_variables())
 update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-with tf.control_dependencies(update_ops):
-    train_op = optimizer.minimize(loss[0], var_list=update_vars, global_step=global_step)
+
+trainable_var_list = []
+for var in tf.global_variables():
+    if var.op.name.split("/")[1] in ["smaller_object", "medium_object", "bigger_object"]: continue
+    trainable_var_list.append(var)
+
+first_stage_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss[0], var_list=trainable_var_list)
+with tf.control_dependencies([first_stage_optimizer, global_step_update] + update_ops):
+    with tf.control_dependencies([moving_ave]):
+        first_stage_train_op = tf.no_op()
+
+second_stage_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss[0], var_list=tf.global_variables())
+with tf.control_dependencies([second_stage_optimizer, global_step_update] + update_ops):
+    with tf.control_dependencies([moving_ave]):
+        second_stage_train_op = tf.no_op()
 
 sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
 saver_to_restore.restore(sess, "./checkpoint/yolov3.ckpt")
-saver = tf.train.Saver(max_to_keep=2)
+saver = tf.train.Saver(max_to_keep=2, var_list=net_var)
 
-for step in range(STEPS):
+for step in range(FISRT_STAGE_STEPS+SECOND_STAGE_STEPS):
+    if step + 1 <= FISRT_STAGE_STEPS:
+        train_op = first_stage_train_op
+    else:
+        train_op = second_stage_train_op
+
     run_items = sess.run([train_op, write_op, y_pred, y_true] + loss, feed_dict={is_training:True})
 
     if (step+1) % EVAL_INTERNAL == 0:

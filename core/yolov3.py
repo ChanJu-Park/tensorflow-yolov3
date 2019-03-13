@@ -87,13 +87,14 @@ class yolov3(object):
         inputs = common._conv2d_fixed_padding(inputs, filters * 2, 3)
         return route, inputs
 
-    def _detection_layer(self, inputs, anchors):
-        num_anchors = len(anchors)
-        feature_map = slim.conv2d(inputs, num_anchors * (5 + self._NUM_CLASSES), 1,
-                                stride=1, normalizer_fn=None,
-                                activation_fn=None,
-                                biases_initializer=tf.zeros_initializer())
-        return feature_map
+    def _detection_layer(self, inputs, anchors, name):
+        with tf.variable_scope(name):
+            num_anchors = len(anchors)
+            feature_map = slim.conv2d(inputs, num_anchors * (5 + self._NUM_CLASSES), 1,
+                                    stride=1, normalizer_fn=None,
+                                    activation_fn=None,
+                                    biases_initializer=tf.zeros_initializer())
+            return feature_map
 
     def _reorg_layer(self, feature_map, anchors):
 
@@ -177,7 +178,7 @@ class yolov3(object):
 
                 with tf.variable_scope('yolo-v3'):
                     route, inputs = self._yolo_block(inputs, 512)
-                    feature_map_1 = self._detection_layer(inputs, self._ANCHORS[6:9])
+                    feature_map_1 = self._detection_layer(inputs, self._ANCHORS[6:9], name="smaller_object")
                     feature_map_1 = tf.identity(feature_map_1, name='feature_map_1')
 
                     inputs = common._conv2d_fixed_padding(route, 256, 1)
@@ -186,7 +187,7 @@ class yolov3(object):
                     inputs = tf.concat([inputs, route_2], axis=3)
 
                     route, inputs = self._yolo_block(inputs, 256)
-                    feature_map_2 = self._detection_layer(inputs, self._ANCHORS[3:6])
+                    feature_map_2 = self._detection_layer(inputs, self._ANCHORS[3:6], name="medium_object")
                     feature_map_2 = tf.identity(feature_map_2, name='feature_map_2')
 
                     inputs = common._conv2d_fixed_padding(route, 128, 1)
@@ -195,7 +196,7 @@ class yolov3(object):
                     inputs = tf.concat([inputs, route_1], axis=3)
 
                     route, inputs = self._yolo_block(inputs, 128)
-                    feature_map_3 = self._detection_layer(inputs, self._ANCHORS[0:3])
+                    feature_map_3 = self._detection_layer(inputs, self._ANCHORS[0:3], name="bigger_object")
                     feature_map_3 = tf.identity(feature_map_3, name='feature_map_3')
 
             return feature_map_1, feature_map_2, feature_map_3

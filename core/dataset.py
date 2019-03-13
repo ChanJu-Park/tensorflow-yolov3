@@ -83,14 +83,13 @@ class Parser(object):
     def preprocess(self, image, gt_boxes):
 
         ################################# data augmentation ##################################
-        # data_aug_flag = tf.to_int32(tf.random_uniform(shape=[], minval=-5, maxval=5))
+        data_aug_flag = tf.to_int32(tf.random_uniform(shape=[], minval=-5, maxval=5))
 
-        # caseO = tf.equal(data_aug_flag, 1), lambda: self.flip_left_right(image, gt_boxes)
-        # case1 = tf.equal(data_aug_flag, 2), lambda: self.random_distort_color(image, gt_boxes)
-        # case2 = tf.equal(data_aug_flag, 3), lambda: self.random_blur(image, gt_boxes)
-        # case3 = tf.equal(data_aug_flag, 4), lambda: self.random_crop(image, gt_boxes)
+        case0 = tf.equal(data_aug_flag, 1), lambda: self.flip_left_right(image, gt_boxes)
+        case1 = tf.equal(data_aug_flag, 2), lambda: self.random_distort_color(image, gt_boxes)
+        case2 = tf.equal(data_aug_flag, 3), lambda: self.random_blur(image, gt_boxes)
 
-        # image, gt_boxes = tf.case([caseO, case1, case2, case3], lambda: (image, gt_boxes))
+        image, gt_boxes = tf.case([case0, case1, case2], lambda: (image, gt_boxes))
 
         image, gt_boxes = utils.resize_image_correct_bbox(image, gt_boxes, self.image_h, self.image_w)
 
